@@ -80,4 +80,3 @@ def wait_for_error(client, error, resource):
     except error:
         LOG.info('{name} errored successfully'.format(
             name=client.resource_name))
-        return

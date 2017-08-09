@@ -22,6 +22,7 @@ from tempest import test
 
 from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.services.load_balancer.common import waiters
+from octavia_tempest_plugin.tests.scenario.v2.base import base_listener
 from octavia_tempest_plugin.tests.scenario.v2.base import base_loadbalancer
 
 LOG = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ class TestLoadbalancerSmoke(test.BaseTestCase):
         self.assertEqual('DELETED', lb['provisioning_status'])
 
 
-class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest):
+class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest,
+                      base_listener.BaseListenerTest):
 
     @test.services('network', 'image', 'compute')
     @decorators.attr(type='slow')
@@ -95,5 +97,20 @@ class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest):
 
         # Create load balancer for end to end tests.
         lb = self.create_loadbalancer()
+        self.addCleanup(self.lb_client.delete_loadbalancer, lb['id'],
+                        lib_exc.Conflict)
 
-        self.addCleanup(self.delete_loadbalancer, lb['id'], lib_exc.Conflict)
+        # Create listener for load balancer
+        listener = self.create_listener(lb['id'])
+        self.addCleanup(self.li_client.delete_listener, listener['id'],
+                        lib_exc.NotFound)
+
+        # Wait for load balancer to update
+        waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
+                                'provisioning_status')
+
+        # Delete listener
+        self.delete_listener(listener['id'])
+
+        # Delete load balancer
+        self.delete_loadbalancer(lb['id'])
