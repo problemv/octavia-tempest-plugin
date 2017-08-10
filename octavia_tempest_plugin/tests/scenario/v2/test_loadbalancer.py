@@ -24,6 +24,7 @@ from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.services.load_balancer.common import waiters
 from octavia_tempest_plugin.tests.scenario.v2.base import base_listener
 from octavia_tempest_plugin.tests.scenario.v2.base import base_loadbalancer
+from octavia_tempest_plugin.tests.scenario.v2.base import base_pool
 
 LOG = logging.getLogger(__name__)
 CONF = config.CONF
@@ -87,7 +88,8 @@ class TestLoadbalancerSmoke(test.BaseTestCase):
 
 
 class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest,
-                      base_listener.BaseListenerTest):
+                      base_listener.BaseListenerTest,
+                      base_pool.BasePoolTest):
 
     @test.services('network', 'image', 'compute')
     @decorators.attr(type='slow')
@@ -108,6 +110,17 @@ class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest,
         # Wait for load balancer to update
         waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
                                 'provisioning_status')
+
+        # Create pool for listener
+        pool = self.create_pool(listener['id'])
+        self.addCleanup(self.pool_client.delete_pool, pool['id'],
+                        lib_exc.NotFound)
+
+        waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
+                                'provisioning_status')
+
+        # Delete pool
+        self.delete_pool(pool['id'])
 
         # Delete listener
         self.delete_listener(listener['id'])
