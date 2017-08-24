@@ -14,10 +14,10 @@
 #    limitations under the License.
 
 import copy
-import os
+import random
+import string
 
 from oslo_log import log as logging
-from tempest.common import credentials_factory as common_creds
 from tempest.common import waiters
 from tempest import config
 from tempest.lib.common import ssh
@@ -25,35 +25,24 @@ from tempest.lib.common.utils import data_utils
 from tempest.lib import exceptions as lib_exc
 from tempest import test
 
-from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.tests.scenario.v2.base import constants as const
 
 CONF = config.CONF
-
 LOG = logging.getLogger(__name__)
-HTTPD_SRC = os.path.abspath(
-    os.path.join(os.path.dirname(__file__),
-                 '../../../contrib/httpd.go'))
 
 
 class BaseComputeMixin(test.BaseTestCase):
 
-    identity_version = 'v3'
-    credential_type = 'identity_admin'
-
-    @classmethod
-    def setup_clients(cls):
-        super(BaseComputeMixin, cls).setup_clients()
-
-        credentials = common_creds.get_configured_admin_credentials(
-            cls.credential_type, identity_version=cls.identity_version)
-
-        cls.clients = clients.Manager(credentials)
-
     def create_test_server(self, members, network=None, name=None, flavor=None,
                            **kwargs):
         if name is None:
-            name = data_utils.rand_name(__name__ + "-instance")
+            r = random.SystemRandom()
+            name = "m{}".format("".join(
+                [r.choice(string.ascii_uppercase + string.digits)
+                 for i in range(
+                    CONF.octavia_tempest.random_server_name_length - 1)]
+            ))
+
         if flavor is None:
             flavor = CONF.compute.flavor_ref
         if CONF.octavia_tempest.image_tags:
@@ -61,10 +50,20 @@ class BaseComputeMixin(test.BaseTestCase):
         else:
             image_id = CONF.compute.image_ref
 
-        kwargs = self.set_networks_kwarg(network, kwargs) or {}
+        if network:
+            if network.get('id'):
+                kwargs.update({"networks": [{'uuid': network['id']}]})
+            else:
+                LOG.warning('The provided network dict: %s was invalid and '
+                            'did not contain an id', network)
+
+        if CONF.octavia_tempest.availability_zone:
+            kwargs.update(
+                {'availability_zone': CONF.octavia_tempest.availability_zone})
 
         # Create keypair
         servers_keypairs = self.create_keypair()
+        LOG.warning("Keypair %s", servers_keypairs)
 
         secgroup_rules = copy.deepcopy(const.SECURITY_GROUP_RULES)
         secgroup_name, secgroup_id = self.create_secgroup(secgroup_rules)
@@ -102,8 +101,18 @@ class BaseComputeMixin(test.BaseTestCase):
 
         start_server = ("(while true; do echo -e 'HTTP/1.0 200 OK\r\n\r\n"
                         "{server_name}' | sudo nc -l -p {port} ; "
-                        "done)&".format(server_name=name, port=port))
-        ssh_client.exec_command(start_server)
+                        "done)& echo started".format(server_name=name,
+                                                     port=port))
+        LOG.info('Starting backend for server: {}'.format(name))
+        # The tempest SSH client blocks reading the command response but we
+        # don't care about the response. Run the command and move on.
+        ssh_conn = ssh_client._get_ssh_connection()
+        transport = ssh_conn.get_transport()
+        with transport.open_session() as channel:
+            channel.fileno()  # Register event pipe
+            channel.exec_command(start_server)
+            channel.shutdown_write()
+        LOG.info('Backend started for server: {}'.format(name))
 
     def create_secgroup(self, rule_list):
         # Create security group
@@ -111,13 +120,7 @@ class BaseComputeMixin(test.BaseTestCase):
         LOG.info('Creating security group: {}'.format(secgroup_name))
         secgroup = self.clients.security_groups_client\
             .create_security_group(name=secgroup_name)
-
-        sgs = self.clients.security_groups_client.list_security_groups()
-        group_id = None
-        for sg in sgs['security_groups']:
-            if sg['name'] == secgroup_name:
-                group_id = sg['id']
-                break
+        group_id = secgroup['security_group']['id']
 
         for i in rule_list:
             direction = i.pop('direction')
@@ -142,20 +145,6 @@ class BaseComputeMixin(test.BaseTestCase):
                 security_group_id)
         except lib_exc.NotFound:
             pass
-
-    @staticmethod
-    def set_networks_kwarg(network, kwargs=None):
-        params = copy.copy(kwargs) or {}
-        if kwargs and 'networks' in kwargs:
-            return params
-
-        if network:
-            if 'id' in network.keys():
-                params.update({"networks": [{'uuid': network['id']}]})
-            else:
-                LOG.warning('The provided network dict: %s was invalid and '
-                            'did not contain an id', network)
-        return params
 
     @staticmethod
     def get_server_ip(server):

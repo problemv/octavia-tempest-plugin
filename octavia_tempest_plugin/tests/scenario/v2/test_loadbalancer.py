@@ -15,6 +15,7 @@
 
 from oslo_log import log as logging
 from tempest.common import credentials_factory as common_creds
+from tempest.common.utils import services
 from tempest import config
 from tempest.lib import decorators
 from tempest.lib import exceptions as lib_exc
@@ -23,6 +24,7 @@ from tempest import test
 from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.services.load_balancer.common import waiters
 from octavia_tempest_plugin.tests.scenario.v2.base import base_compute
+from octavia_tempest_plugin.tests.scenario.v2.base import base_health_monitor
 from octavia_tempest_plugin.tests.scenario.v2.base import base_listener
 from octavia_tempest_plugin.tests.scenario.v2.base import base_loadbalancer
 from octavia_tempest_plugin.tests.scenario.v2.base import base_member
@@ -49,7 +51,7 @@ class TestLoadbalancerSmoke(test.BaseTestCase):
         cls.clients = clients.Manager(credentials)
         cls.lb_client = cls.clients.lb_client
 
-    @test.services('network', 'image', 'compute')
+    @services('network', 'image', 'compute')
     @decorators.attr(type='smoke')
     @decorators.attr(type='slow')
     @decorators.idempotent_id('b49ab314-67a6-464e-b7a9-ee156bf1090a')
@@ -91,12 +93,30 @@ class TestLoadbalancerSmoke(test.BaseTestCase):
         self.assertEqual('DELETED', lb['provisioning_status'])
 
 
-class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerMixin,
-                      base_listener.BaseListenerMixin,
-                      base_pool.BasePoolMixin, base_member.BaseMemberMixin,
-                      base_compute.BaseComputeMixin):
+class TestOctaviaFull(base_member.BaseMemberMixin,
+                      base_health_monitor.BaseHealthMonitorMixin,
+                      base_compute.BaseComputeMixin,
+                      base_pool.BasePoolMixin, base_listener.BaseListenerMixin,
+                      base_loadbalancer.BaseLoadbalancerMixin):
 
-    @test.services('network', 'image', 'compute')
+    identity_version = 'v3'
+    credential_type = 'identity_admin'
+
+    @classmethod
+    def setup_clients(cls):
+        super(TestOctaviaFull, cls).setup_clients()
+
+        credentials = common_creds.get_configured_admin_credentials(
+            cls.credential_type, identity_version=cls.identity_version)
+
+        cls.clients = clients.Manager(credentials)
+        cls.lb_client = cls.clients.lb_client
+        cls.li_client = cls.clients.li_client
+        cls.pool_client = cls.clients.pool_client
+        cls.hm_client = cls.clients.health_monitor_client
+        cls.member_client = cls.clients.member_client
+
+    @services('network', 'image', 'compute')
     @decorators.attr(type='slow')
     @decorators.idempotent_id('c93e7354-4e4d-4c78-af84-5486688f47cb')
     def test_octavia_full(self):
@@ -116,11 +136,15 @@ class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerMixin,
         server_1 = self.create_test_server(
             members=member_config,
             network={'id': CONF.octavia_tempest.server_network_id},
-            name='tempest-server1', flavor=CONF.compute.flavor_ref)
+            flavor=CONF.compute.flavor_ref)
 
         # Create member for a pool and server
         for name, port in member_config.items():
             ip = self.get_server_ip(server_1)
             self.create_member(pool['id'], port, ip, name, lb)
 
+        # Create Health Monitor
+        self.create_health_monitor(pool, lb)
+
+        # Check if load balancing is working
         self.check_round_robin(lb, member_config)

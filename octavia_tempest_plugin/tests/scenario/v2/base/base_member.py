@@ -17,12 +17,10 @@ import time
 from oslo_log import log as logging
 from six.moves.urllib import error
 from six.moves.urllib import request as urllib2
-from tempest.common import credentials_factory as common_creds
 from tempest import config
 from tempest.lib import exceptions as lib_exc
 from tempest import test
 
-from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.services.load_balancer.common import waiters
 
 LOG = logging.getLogger(__name__)
@@ -30,19 +28,6 @@ CONF = config.CONF
 
 
 class BaseMemberMixin(test.BaseTestCase):
-
-    identity_version = 'v3'
-    credential_type = 'identity_admin'
-
-    @classmethod
-    def setup_clients(cls):
-        super(BaseMemberMixin, cls).setup_clients()
-
-        credentials = common_creds.get_configured_admin_credentials(
-            cls.credential_type, identity_version=cls.identity_version)
-
-        cls.clients = clients.Manager(credentials)
-        cls.member_client = cls.clients.member_client
 
     def create_member(self, pool_id, port, address, name, lb):
         payload = {"member": {

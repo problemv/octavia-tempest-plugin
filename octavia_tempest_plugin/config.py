@@ -63,5 +63,11 @@ OctaviaGroup = [
                help='IP version to use for member creation (4 or 6).'),
     cfg.ListOpt('image_tags',
                 default=None,
-                help='Tags to use for to select an image for VM creation.')
+                help='Tags to use for to select an image for VM creation.'),
+    cfg.StrOpt('availability_zone',
+               default=None,
+               help='Availability zone to use for server creation.'),
+    cfg.IntOpt('random_server_name_length',
+               default=15,
+               help='Length of the name to use for server creation.'),
 ]

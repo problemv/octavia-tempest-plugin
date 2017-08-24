@@ -14,11 +14,9 @@
 #
 
 from oslo_log import log as logging
-from tempest.common import credentials_factory as common_creds
 from tempest import config
 from tempest import test
 
-from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.services.load_balancer.common import waiters
 
 LOG = logging.getLogger(__name__)
@@ -26,19 +24,6 @@ CONF = config.CONF
 
 
 class BaseLoadbalancerMixin(test.BaseTestCase):
-
-    identity_version = 'v3'
-    credential_type = 'identity_admin'
-
-    @classmethod
-    def setup_clients(cls):
-        super(BaseLoadbalancerMixin, cls).setup_clients()
-
-        credentials = common_creds.get_configured_admin_credentials(
-            cls.credential_type, identity_version=cls.identity_version)
-
-        cls.clients = clients.Manager(credentials)
-        cls.lb_client = cls.clients.lb_client
 
     def create_loadbalancer(self):
         payload = {'loadbalancer': {
