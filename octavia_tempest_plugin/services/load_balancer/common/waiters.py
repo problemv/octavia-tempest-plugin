@@ -28,7 +28,7 @@ def wait_for_status(client, status, resource, status_key):
     LOG.info('Waiting for {name} status to update to {status}'.format(
         name=client.resource_name, status=status))
     while True:
-        response = client.get_status(resource['id'])
+        response = client.get_status(resource)
         if response[status_key] != status:
             time.sleep(client.build_interval)
         elif response[status_key] == status:
@@ -61,7 +61,7 @@ def wait_for_error(client, error, resource):
     LOG.info('Waiting for {name} to error'.format(name=client.resource_name))
     try:
         while True:
-            response = client.get_status(resource['id'])
+            response = client.get_status(resource)
             if int(time.time()) - start >= client.timeout:
                 message = (
                     '{name} failed to error within the required time '

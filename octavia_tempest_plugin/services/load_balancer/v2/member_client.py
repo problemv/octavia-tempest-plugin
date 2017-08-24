@@ -22,28 +22,34 @@ from tempest.lib.common import rest_client
 CONF = config.CONF
 
 
-class ListenerClient(rest_client.RestClient):
+class MemberClient(rest_client.RestClient):
 
-    _uri = '/v2.0/lbaas/listeners'
+    _uri = '/v2.0/lbaas/pools/{pool_id}/members'
 
     def __init__(self, auth_provider, service, region):
-        super(ListenerClient, self).__init__(auth_provider, service, region)
+        super(MemberClient, self).__init__(auth_provider, service,
+                                           region)
         self.timeout = CONF.octavia_tempest.build_timeout
         self.build_interval = CONF.octavia_tempest.build_interval
-        self.resource_name = 'listener'
+        self.resource_name = 'member'
 
-    def list_listeners(self):
-        response, body = self.get(self._uri)
+    def list_members(self, pool_id):
+        uri = self._uri.format(pool_id=pool_id)
+        response, body = self.get(uri)
         self.expected_success(200, response.status)
         return json.loads(body)
 
-    def create_listener(self, payload):
-        response, body = self.post(self._uri, json.dumps(payload))
+    def create_member(self, pool_id, payload):
+        uri = self._uri.format(pool_id=pool_id)
+        response, body = self.post(uri, json.dumps(payload))
         self.expected_success(201, response.status)
-        return json.loads(body)['listener']
+        body = json.loads(body)['member']
+        body['pool_id'] = pool_id
+        return body
 
-    def delete_listener(self, listener_id, ignore_errors=None):
-        uri = self._uri + '/{}'.format(listener_id)
+    def delete_member(self, pool_id, member_id, ignore_errors=None):
+        uri = (self._uri + '/{member_id}').format(pool_id=pool_id,
+                                                  member_id=member_id)
         if ignore_errors:
             try:
                 response, body = self.delete(uri)
@@ -55,18 +61,21 @@ class ListenerClient(rest_client.RestClient):
         self.expected_success(204, response.status)
         return response.status
 
-    def get_listener(self, listener_id):
-        uri = self._uri + '/{}'.format(listener_id)
-
+    def get_member(self, pool_id, member_id):
+        uri = (self._uri + '/{member_id}').format(pool_id=pool_id,
+                                                  member_id=member_id)
         response, body = self.get(uri)
         self.expected_success(200, response.status)
-        return json.loads(body)['listener']
+        body = json.loads(body)['member']
+        body['pool_id'] = pool_id
+        return body
 
-    def update_listener(self, listener_id, payload):
-        uri = self._uri + '/{}'.format(listener_id)
+    def update_member(self, pool_id, member_id, payload):
+        uri = (self._uri + '/{member_id}').format(pool_id=pool_id,
+                                                  member_id=member_id)
         response, body = self.put(uri, json.dumps(payload))
         self.expected_success(200, response.status)
-        return json.loads(body)['listener']
+        return json.loads(body)['member']
 
-    def get_status(self, listener):
-        return self.get_listener(listener['id'])
+    def get_status(self, member):
+        return self.get_member(member['pool_id'], member['id'])

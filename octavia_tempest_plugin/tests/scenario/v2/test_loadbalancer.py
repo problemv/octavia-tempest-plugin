@@ -22,9 +22,13 @@ from tempest import test
 
 from octavia_tempest_plugin import clients
 from octavia_tempest_plugin.services.load_balancer.common import waiters
+from octavia_tempest_plugin.tests.scenario.v2.base import base_compute
 from octavia_tempest_plugin.tests.scenario.v2.base import base_listener
 from octavia_tempest_plugin.tests.scenario.v2.base import base_loadbalancer
+from octavia_tempest_plugin.tests.scenario.v2.base import base_member
 from octavia_tempest_plugin.tests.scenario.v2.base import base_pool
+from octavia_tempest_plugin.tests.scenario.v2.base import constants as const
+
 
 LOG = logging.getLogger(__name__)
 CONF = config.CONF
@@ -87,9 +91,10 @@ class TestLoadbalancerSmoke(test.BaseTestCase):
         self.assertEqual('DELETED', lb['provisioning_status'])
 
 
-class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest,
-                      base_listener.BaseListenerTest,
-                      base_pool.BasePoolTest):
+class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerMixin,
+                      base_listener.BaseListenerMixin,
+                      base_pool.BasePoolMixin, base_member.BaseMemberMixin,
+                      base_compute.BaseComputeMixin):
 
     @test.services('network', 'image', 'compute')
     @decorators.attr(type='slow')
@@ -97,33 +102,25 @@ class TestOctaviaFull(base_loadbalancer.BaseLoadbalancerTest,
     def test_octavia_full(self):
         # Will be adding parts to this test individually
 
-        # Create load balancer for end to end tests.
+        # Create load balancer
         lb = self.create_loadbalancer()
-        self.addCleanup(self.lb_client.delete_loadbalancer, lb['id'],
-                        lib_exc.Conflict)
 
         # Create listener for load balancer
-        listener = self.create_listener(lb['id'])
-        self.addCleanup(self.li_client.delete_listener, listener['id'],
-                        lib_exc.NotFound)
-
-        # Wait for load balancer to update
-        waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
-                                'provisioning_status')
+        listener = self.create_listener(lb)
 
         # Create pool for listener
-        pool = self.create_pool(listener['id'])
-        self.addCleanup(self.pool_client.delete_pool, pool['id'],
-                        lib_exc.NotFound)
+        pool = self.create_pool(listener['id'], lb)
 
-        waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
-                                'provisioning_status')
+        # Create test server
+        member_config = const.MEMBER_CONFIG
+        server_1 = self.create_test_server(
+            members=member_config,
+            network={'id': CONF.octavia_tempest.server_network_id},
+            name='tempest-server1', flavor=CONF.compute.flavor_ref)
 
-        # Delete pool
-        self.delete_pool(pool['id'])
+        # Create member for a pool and server
+        for name, port in member_config.items():
+            ip = self.get_server_ip(server_1)
+            self.create_member(pool['id'], port, ip, name, lb)
 
-        # Delete listener
-        self.delete_listener(listener['id'])
-
-        # Delete load balancer
-        self.delete_loadbalancer(lb['id'])
+        self.check_round_robin(lb, member_config)

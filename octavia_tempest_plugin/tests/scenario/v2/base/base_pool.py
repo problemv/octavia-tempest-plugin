@@ -26,14 +26,14 @@ LOG = logging.getLogger(__name__)
 CONF = config.CONF
 
 
-class BasePoolTest(test.BaseTestCase):
+class BasePoolMixin(test.BaseTestCase):
 
     identity_version = 'v3'
     credential_type = 'identity_admin'
 
     @classmethod
     def setup_clients(cls):
-        super(BasePoolTest, cls).setup_clients()
+        super(BasePoolMixin, cls).setup_clients()
 
         credentials = common_creds.get_configured_admin_credentials(
             cls.credential_type, identity_version=cls.identity_version)
@@ -41,7 +41,7 @@ class BasePoolTest(test.BaseTestCase):
         cls.clients = clients.Manager(credentials)
         cls.pool_client = cls.clients.pool_client
 
-    def create_pool(self, listener_id):
+    def create_pool(self, listener_id, lb):
         payload = {"pool": {
             "lb_algorithm": "ROUND_ROBIN",
             "protocol": "HTTP",
@@ -64,12 +64,19 @@ class BasePoolTest(test.BaseTestCase):
         pool = self.pool_client.get_pool(pool['id'])
         self.assertEqual('ACTIVE', pool['provisioning_status'])
 
+        self.addCleanup(self.delete_pool, pool, lb)
+
+        # Wait for load balancer to update
+        waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
+                                'provisioning_status')
         return pool
 
-    def delete_pool(self, pool_id, ignore_errors=None):
-        pool = self.pool_client.get_pool(pool_id)
+    def delete_pool(self, pool, wait_for_lb=None, ignore_errors=None):
+        if wait_for_lb:
+            waiters.wait_for_status(self.lb_client, 'ACTIVE', wait_for_lb,
+                                    'provisioning_status')
         LOG.info('Deleting pool')
-        self.pool_client.delete_pool(pool_id, ignore_errors)
+        self.pool_client.delete_pool(pool['id'], ignore_errors)
         waiters.wait_for_error(self.pool_client, lib_exc.NotFound, pool)
         self.assertRaises(lib_exc.NotFound, self.li_client.get_listener,
-                          pool_id)
+                          pool['id'])

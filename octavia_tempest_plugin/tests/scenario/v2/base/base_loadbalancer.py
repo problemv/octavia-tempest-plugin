@@ -25,14 +25,14 @@ LOG = logging.getLogger(__name__)
 CONF = config.CONF
 
 
-class BaseLoadbalancerTest(test.BaseTestCase):
+class BaseLoadbalancerMixin(test.BaseTestCase):
 
     identity_version = 'v3'
     credential_type = 'identity_admin'
 
     @classmethod
     def setup_clients(cls):
-        super(BaseLoadbalancerTest, cls).setup_clients()
+        super(BaseLoadbalancerMixin, cls).setup_clients()
 
         credentials = common_creds.get_configured_admin_credentials(
             cls.credential_type, identity_version=cls.identity_version)
@@ -59,6 +59,8 @@ class BaseLoadbalancerTest(test.BaseTestCase):
 
         lb = self.lb_client.get_loadbalancer(lb['id'])
         self.assertEqual('ACTIVE', lb['provisioning_status'])
+
+        self.addCleanup(self.lb_client.delete_loadbalancer, lb['id'])
 
         return lb
 

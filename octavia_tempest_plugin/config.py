@@ -53,6 +53,15 @@ OctaviaGroup = [
                help='Timeout in seconds to wait for a '
                     'load balancer to build.'),
     cfg.StrOpt('vip_network_id',
-               default='614ad35d-62a7-4b5a-b307-9095691ccaa4',
-               help='Network to provision load balancer from.')
+               default=None,
+               help='Network to provision load balancer from.'),
+    cfg.StrOpt('server_network_id',
+               default=None,
+               help='Network to provision server from.'),
+    cfg.IntOpt('ip_version',
+               default=4,
+               help='IP version to use for member creation (4 or 6).'),
+    cfg.ListOpt('image_tags',
+                default=None,
+                help='Tags to use for to select an image for VM creation.')
 ]

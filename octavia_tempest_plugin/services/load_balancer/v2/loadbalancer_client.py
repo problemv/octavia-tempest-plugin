@@ -31,7 +31,6 @@ class LoadbalancerClient(rest_client.RestClient):
         self.timeout = CONF.octavia_tempest.lb_build_timeout
         self.build_interval = CONF.octavia_tempest.lb_build_interval
         self.resource_name = 'load balancer'
-        self.get_status = self.get_loadbalancer
 
     def list_loadbalancers(self):
         response, body = self.get(self._uri)
@@ -68,3 +67,6 @@ class LoadbalancerClient(rest_client.RestClient):
         response, body = self.put(uri, json.dumps(payload))
         self.expected_success(200, response.status)
         return json.loads(body)['loadbalancer']
+
+    def get_status(self, lb):
+        return self.get_loadbalancer(lb['id'])

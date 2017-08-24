@@ -32,7 +32,6 @@ class PoolClient(rest_client.RestClient):
         self.timeout = CONF.octavia_tempest.build_timeout
         self.build_interval = CONF.octavia_tempest.build_interval
         self.resource_name = 'pool'
-        self.get_status = self.get_pool
 
     def list_pools(self):
         response, body = self.get(self._uri)
@@ -69,3 +68,6 @@ class PoolClient(rest_client.RestClient):
         response, body = self.put(uri, json.dumps(payload))
         self.expected_success(200, response.status)
         return json.loads(body)['pool']
+
+    def get_status(self, pool):
+        return self.get_pool(pool['id'])

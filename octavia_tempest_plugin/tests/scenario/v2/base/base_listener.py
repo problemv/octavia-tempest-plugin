@@ -26,14 +26,14 @@ LOG = logging.getLogger(__name__)
 CONF = config.CONF
 
 
-class BaseListenerTest(test.BaseTestCase):
+class BaseListenerMixin(test.BaseTestCase):
 
     identity_version = 'v3'
     credential_type = 'identity_admin'
 
     @classmethod
     def setup_clients(cls):
-        super(BaseListenerTest, cls).setup_clients()
+        super(BaseListenerMixin, cls).setup_clients()
 
         credentials = common_creds.get_configured_admin_credentials(
             cls.credential_type, identity_version=cls.identity_version)
@@ -41,14 +41,14 @@ class BaseListenerTest(test.BaseTestCase):
         cls.clients = clients.Manager(credentials)
         cls.li_client = cls.clients.li_client
 
-    def create_listener(self, lb_id):
+    def create_listener(self, lb):
         payload = {'listener': {
             'protocol': 'HTTP',
             'description': 'Listener for tempest tests',
             'admin_state_up': True,
             'connection_limit': 200,
             'protocol_port': '80',
-            'loadbalancer_id': lb_id,
+            'loadbalancer_id': lb['id'],
             'name': 'TEMPEST_TEST_LISTENER'}
         }
         LOG.info('Creating listener')
@@ -65,11 +65,23 @@ class BaseListenerTest(test.BaseTestCase):
         listener = self.li_client.get_listener(listener['id'])
         self.assertEqual('ACTIVE', listener['provisioning_status'])
 
+        self.addCleanup(self.delete_listener, listener, lb)
+
+        # Wait for load balancer to update
+        waiters.wait_for_status(self.lb_client, 'ACTIVE', lb,
+                                'provisioning_status')
+
         return listener
 
-    def delete_listener(self, li_id, ignore_errors=None):
-        listener = self.li_client.get_listener(li_id)
+    def delete_listener(self, listener, wait_for_lb=None, ignore_errors=None):
+        if wait_for_lb:
+            waiters.wait_for_status(self.lb_client, 'ACTIVE', wait_for_lb,
+                                    'provisioning_status')
+        listener = self.li_client.get_listener(listener['id'])
+
         LOG.info('Deleting listener')
-        self.li_client.delete_listener(li_id, ignore_errors)
+        self.li_client.delete_listener(listener['id'], ignore_errors)
         waiters.wait_for_error(self.li_client, lib_exc.NotFound, listener)
-        self.assertRaises(lib_exc.NotFound, self.li_client.get_listener, li_id)
+
+        self.assertRaises(lib_exc.NotFound, self.li_client.get_listener,
+                          listener['id'])
